@@ -9,12 +9,12 @@ mod parser;
 mod run;
 mod symbolizer;
 
-// TODO: negatives become zero
 // TODO: multiplication / IF f=0 then Q else R end
 
 pub struct Config {
   allow_named_vars: bool,
   strict_underflow: bool,
+  allow_constants_in_operations: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let config = Config {
     allow_named_vars: true,
     strict_underflow: true,
+    allow_constants_in_operations: true,
   };
   let res = symbolize(&config, &code);
   let (_, parsed) = match res {
@@ -53,19 +54,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   println!("Done!");
   println!("Running program...");
   let start = Instant::now();
+
   match run(&config, &parsed) {
     Ok(state) => {
       let elapsed = start.elapsed();
       println!("Success! (time: {:?})", elapsed);
-      let max_k = match state.keys().map(|s| s.len()).max() {
+      let max_k = match state.keys().map(|s| s.chars().count()).max() {
         Some(max_k) => max_k,
         None => {
           println!("No variables used.");
           return Ok(());
         }
       };
-      let max_chars = (max_k as f64).log10().ceil() as usize + 3;
+      let max_chars = max_k + 1;
       let mut keys = state.keys().collect::<Vec<_>>();
+
+      // This complex sorting function is just there so that x2 will be before x12
       keys.sort_by(|a, b| {
         let mut a_number = None;
         let mut b_number = None;
@@ -90,10 +94,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           (Some(xa), Some(xb)) => xa.partial_cmp(&xb).unwrap(),
         }
       });
+
       for key in keys {
-        let key_str = format!("{key}");
-        let pad = " ".repeat(max_chars - key_str.len());
-        println!("{key_str}{pad} = {}", state.get(key).unwrap());
+        let pad = " ".repeat(max_chars - key.len());
+        println!("{key}{pad} = {}", state.get(key).unwrap());
       }
     }
     Err(e) => println!("A runtime error occurred: {e:?}"),
