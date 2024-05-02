@@ -13,14 +13,42 @@ mod symbolizer;
 
 pub struct Config {
   allow_named_vars: bool,
-  strict_underflow: bool,
-  allow_constants_in_operations: bool,
+  allow_underflow: bool,
+  // allow_constants_in_operations: bool,
+}
+impl Config {
+  pub fn from(args: &Vec<String>) -> Result<Config, String> {
+    let mut config = Config {
+      allow_named_vars: false,
+      allow_underflow: false,
+    };
+    for arg in args {
+      match arg.chars().skip(2).collect::<String>().as_str() {
+        "allow_named_vars" => config.allow_named_vars = true,
+        "allow_underflow" => config.allow_underflow = true,
+        _ => return Err(format!("Unknown config variable: {arg}")),
+      }
+    }
+    Ok(config)
+  }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let args: Vec<String> = env::args().collect();
+  let config_args = args
+    .iter()
+    .filter(|s| s.starts_with("--"))
+    .cloned()
+    .collect::<Vec<_>>();
+  let file_args = args
+    .iter()
+    .filter(|s| !s.starts_with("--"))
+    .cloned()
+    .collect::<Vec<_>>();
 
-  if args.len() != 2 {
+  let config = Config::from(&config_args)?;
+
+  if file_args.len() != 2 {
     println!("Usage: {} <file>", args[0]);
     return Ok(());
   }
@@ -32,11 +60,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let code = std::fs::read_to_string(path)?;
 
   println!("Symbolizing and parsing program...");
-  let config = Config {
-    allow_named_vars: true,
-    strict_underflow: true,
-    allow_constants_in_operations: true,
-  };
   let res = symbolize(&config, &code);
   let (_, parsed) = match res {
     Ok(k) => match parse(&k, 0) {

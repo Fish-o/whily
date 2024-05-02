@@ -34,7 +34,7 @@ fn run_with_state(
         match v1.checked_sub(v2.to_owned()) {
           Some(val) => state.insert(v0.to_owned(), val),
           None => {
-            if config.strict_underflow {
+            if !config.allow_underflow {
               return Err(RuntimeError::VariableUnderflow(v0.to_owned()));
             } else {
               state.insert(v0.to_owned(), 0)
@@ -78,9 +78,12 @@ pub enum RuntimeError {
 impl std::fmt::Debug for RuntimeError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::UnassignedVariable(v) => write!(f, "UnassignedVariable x{v}"),
-      Self::VariableOverflow(v) => write!(f, "VariableOverflow x{v}"),
-      Self::VariableUnderflow(v) => write!(f, "VariableUnderflow x{v}"),
+      Self::UnassignedVariable(v) => write!(f, "UnassignedVariable {v}"),
+      Self::VariableOverflow(v) => write!(f, "VariableOverflow {v}"),
+      Self::VariableUnderflow(v) => write!(
+        f,
+        "VariableUnderflow {v} (try running with '--allow_underflow'?)"
+      ),
       Self::MaxLoopsReached => write!(f, "MaxLoopsReached"),
     }
   }
