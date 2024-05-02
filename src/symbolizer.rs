@@ -1,7 +1,9 @@
+use crate::Config;
+
 const KEYWORDS: [&str; 3] = ["while", "do", "od"];
 
 pub enum Symbol {
-  Variable(u64),
+  Variable(String),
   Constant(u64),
   Keyword(String),
   Declare,
@@ -14,7 +16,7 @@ pub enum Symbol {
 impl std::fmt::Debug for Symbol {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::Variable(v) => write!(f, "x{v}"),
+      Self::Variable(v) => write!(f, "{v}"),
       Self::Constant(c) => write!(f, "{c}"),
       Self::Keyword(k) => write!(f, "{k}"),
       Self::Declare => write!(f, ":="),
@@ -25,7 +27,8 @@ impl std::fmt::Debug for Symbol {
     }
   }
 }
-pub fn symbolize(input: &str) -> Result<Vec<Symbol>, SymbolError> {
+
+pub fn symbolize(config: &Config, input: &str) -> Result<Vec<Symbol>, SymbolError> {
   let mut chars = input.chars().peekable().into_iter();
   let mut line = 1;
   let mut col = 0;
@@ -67,7 +70,7 @@ pub fn symbolize(input: &str) -> Result<Vec<Symbol>, SymbolError> {
       Some('+') => Some(Symbol::Plus),
       Some('-') => Some(Symbol::Minus),
       Some(';') => Some(Symbol::EOS),
-      Some('x') => Some(Symbol::Variable(0)),
+      Some('x') => Some(Symbol::Variable("".to_owned())),
       Some('\n') => {
         col = 0;
         line += 1;
@@ -77,7 +80,7 @@ pub fn symbolize(input: &str) -> Result<Vec<Symbol>, SymbolError> {
       Some(c) if c.is_whitespace() => continue,
       _ => None,
     };
-    let is_var = matches!(symbol, Some(Symbol::Variable(0)));
+    let is_var = matches!(symbol, Some(Symbol::Variable(_)));
     if !is_var && symbol.is_some() {
       for _ in 0..skip {
         chars.next();
@@ -103,7 +106,7 @@ pub fn symbolize(input: &str) -> Result<Vec<Symbol>, SymbolError> {
         }
       }
       if is_var {
-        symbol = Some(Symbol::Variable(val));
+        symbol = Some(Symbol::Variable(format!("x{val}")));
       } else {
         symbol = Some(Symbol::Constant(val));
       }
@@ -131,7 +134,32 @@ pub fn symbolize(input: &str) -> Result<Vec<Symbol>, SymbolError> {
         }
       }
       if symbol.is_none() {
-        return Err(SymbolError::new(line, col, "Unknown keyword"));
+        if !config.allow_named_vars {
+          return Err(SymbolError::new(line, col, "Unknown keyword"));
+        }
+
+        // make it a variable
+        match c {
+          Some('A'..='Z') | Some('a'..='z') | Some('0'..='9') | Some('_') => {}
+          _ => {
+            return Err(SymbolError::new(
+              line,
+              col,
+              "Unknown keyword or invalid variable name",
+            ))
+          }
+        }
+        let mut variable_name = format!("{}", c.unwrap());
+        loop {
+          match chars.peek() {
+            None => break,
+            Some('A'..='Z') | Some('a'..='z') | Some('0'..='9') | Some('_') => {}
+            _ => break,
+          }
+          c = chars.next();
+          variable_name = format!("{variable_name}{}", c.unwrap());
+        }
+        symbol = Some(Symbol::Variable(variable_name));
       }
     }
     assert!(symbol.is_some());

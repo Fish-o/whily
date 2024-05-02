@@ -9,9 +9,17 @@ mod parser;
 mod run;
 mod symbolizer;
 
+// TODO: negatives become zero
+// TODO: multiplication / IF f=0 then Q else R end
+
+pub struct Config {
+  allow_named_vars: bool,
+  strict_underflow: bool,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let args: Vec<String> = env::args().collect();
-  let wd = std::env::current_dir()?;
+
   if args.len() != 2 {
     println!("Usage: {} <file>", args[0]);
     return Ok(());
@@ -22,9 +30,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     return Ok(());
   }
   let code = std::fs::read_to_string(path)?;
+
   println!("Symbolizing and parsing program...");
-  let res = symbolize(&code);
-  let (index, parsed) = match res {
+  let config = Config {
+    allow_named_vars: true,
+    strict_underflow: true,
+  };
+  let res = symbolize(&config, &code);
+  let (_, parsed) = match res {
     Ok(k) => match parse(&k, 0) {
       Ok(k) => k,
       Err(e) => {
@@ -40,24 +53,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   println!("Done!");
   println!("Running program...");
   let start = Instant::now();
-  match run(&parsed) {
+  match run(&config, &parsed) {
     Ok(state) => {
       let elapsed = start.elapsed();
       println!("Success! (time: {:?})", elapsed);
-      let max_k = match state.keys().max() {
+      let max_k = match state.keys().map(|s| s.len()).max() {
         Some(max_k) => max_k,
         None => {
           println!("No variables used.");
           return Ok(());
         }
       };
-      let max_chars = (*max_k as f64).log10().ceil() as usize + 1;
+      let max_chars = (max_k as f64).log10().ceil() as usize + 3;
       let mut keys = state.keys().collect::<Vec<_>>();
-      keys.sort();
+      keys.sort_by(|a, b| {
+        let mut a_number = None;
+        let mut b_number = None;
+        if a.starts_with("x") {
+          let number = a.chars().skip(1).collect::<String>();
+          let res = u64::from_str_radix(&number, 10);
+          if res.is_ok() {
+            a_number = Some(res.unwrap());
+          }
+        }
+        if b.starts_with("x") {
+          let number = b.chars().skip(1).collect::<String>();
+          let res = u64::from_str_radix(&number, 10);
+          if res.is_ok() {
+            b_number = Some(res.unwrap());
+          }
+        }
+        match (a_number, b_number) {
+          (None, None) => a.partial_cmp(b).unwrap(),
+          (None, Some(_)) => std::cmp::Ordering::Less,
+          (Some(_), None) => std::cmp::Ordering::Greater,
+          (Some(xa), Some(xb)) => xa.partial_cmp(&xb).unwrap(),
+        }
+      });
       for key in keys {
         let key_str = format!("{key}");
         let pad = " ".repeat(max_chars - key_str.len());
-        println!("x{key_str}{pad} = {}", state.get(key).unwrap());
+        println!("{key_str}{pad} = {}", state.get(key).unwrap());
       }
     }
     Err(e) => println!("A runtime error occurred: {e:?}"),

@@ -3,10 +3,10 @@ use crate::symbolizer::Symbol;
 #[derive(Debug)]
 pub enum Statement {
   S(Box<Statement>, Box<Statement>),
-  DeclarePlus(u64, u64, u64),
-  DeclareMin(u64, u64, u64),
-  DeclareConst(u64, u64),
-  While(u64, Box<Statement>),
+  DeclarePlus(String, String, String),
+  DeclareMin(String, String, String),
+  DeclareConst(String, u64),
+  While(String, Box<Statement>),
 }
 
 pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statement), String> {
@@ -60,7 +60,7 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
         index += 1;
         let third = symbols.get(index);
         match third {
-          Some(Symbol::Constant(c)) => statement = Some(Statement::DeclareConst(*v0, *c)),
+          Some(Symbol::Constant(c)) => statement = Some(Statement::DeclareConst(v0.to_owned(), *c)),
           Some(Symbol::Variable(v1)) => {
             index += 1;
             let operation = symbols.get(index);
@@ -89,8 +89,20 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
           };
 
             match operation {
-              Symbol::Plus => statement = Some(Statement::DeclarePlus(*v0, *v1, *v2)),
-              Symbol::Minus => statement = Some(Statement::DeclareMin(*v0, *v1, *v2)),
+              Symbol::Plus => {
+                statement = Some(Statement::DeclarePlus(
+                  v0.to_owned(),
+                  v1.to_owned(),
+                  v2.to_owned(),
+                ))
+              }
+              Symbol::Minus => {
+                statement = Some(Statement::DeclareMin(
+                  v0.to_owned(),
+                  v1.to_owned(),
+                  v2.to_owned(),
+                ))
+              }
               _ => unreachable!(),
             }
           }
@@ -175,7 +187,7 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
             ))
           }
         };
-        statement = Some(Statement::While(*cv, Box::new(p1.1)));
+        statement = Some(Statement::While(cv.to_owned(), Box::new(p1.1)));
       }
       // ;
       _ => {
@@ -183,6 +195,4 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
       }
     }
   }
-
-  unreachable!()
 }

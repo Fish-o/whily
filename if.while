@@ -1,0 +1,12 @@
+[ if f=0 then Q else R end ]
+y := 1 - f
+n := 1 - y
+while y != 0 do
+  Q
+  y := 0
+od
+while n != do
+  R
+  n := 0
+od
+
