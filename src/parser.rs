@@ -47,13 +47,13 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
       // xi := c
       Some(Symbol::Variable(v0)) => {
         if statement.is_some() {
-          return Err(format!("Found two statements in a row, the second starting with 'x{v0}', did you miss a ; symbol?"));
+          return Err(format!("Found two statements in a row, the second starting with '{v0}', did you miss a ; symbol?"));
         }
         index += 1;
         let second = symbols.get(index);
         if !matches!(second, Some(Symbol::Declare)) {
           return Err(format!(
-            "Invalid second symbol '{:?}' after variable 'x{v0}'",
+            "Invalid second symbol '{:?}' after variable '{v0}'",
             second
           ));
         }
@@ -72,20 +72,20 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
               Some(Symbol::Minus) => Symbol::Minus,
               Some(s) => {
                 return Err(format!(
-                  "Invalid symbol '{s:?}' in 'x{v0} := x{v1} {s:?}'. Only + or - allowed."
+                  "Invalid symbol '{s:?}' in '{v0} := {v1} {s:?}'. Only + or - allowed."
                 ))
               }
-              None => return Err(format!("Unexpected end of program after 'x{v0} := x{v1}'")),
+              None => return Err(format!("Unexpected end of program after '{v0} := {v1}'")),
             };
 
             let v2 = match right {
             Some(Symbol::Variable(v2)) => v2,
             Some(s)  => {
               return Err(format!(
-                "Invalid symbol '{s:?}' in  'x{v0} := x{v1} {operation:?} {s:?}'. Only another variable is allowed."
+                "Invalid symbol '{s:?}' in  '{v0} := {v1} {operation:?} {s:?}'. Only another variable is allowed."
               ))
             }
-            None => return Err(format!("Unexpected end of program after 'x{v0} := x{v1} {operation:?}'.")),
+            None => return Err(format!("Unexpected end of program after '{v0} := {v1} {operation:?}'.")),
           };
 
             match operation {
@@ -108,7 +108,7 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
           }
           Some(t) => {
             return Err(format!(
-              "Invalid second symbol '{t:?}' after variable 'x{v0}'"
+              "Invalid second symbol '{t:?}' after variable '{v0}'"
             ))
           }
           None => return Err(format!("Unexpected end of program after variable 'x{v0}'")),
@@ -135,7 +135,7 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
           Some(Symbol::NotEquals) => {}
           Some(s) => {
             return Err(format!(
-              "Invalid symbol '{s:?}' in 'while x{cv} {s:?}'. Only != is allowed."
+              "Invalid symbol '{s:?}' in 'while {cv} {s:?}'. Only != is allowed."
             ))
           }
           None => return Err(format!("Unexpected end of program after 'while x{cv}'.")),
@@ -146,10 +146,10 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
           Some(Symbol::Constant(0)) => {}
           Some(s) => {
             return Err(format!(
-              "Invalid symbol '{s:?}' in 'while x{cv} != {s:?}'. Only 0 is allowed."
+              "Invalid symbol '{s:?}' in 'while {cv} != {s:?}'. Only 0 is allowed."
             ))
           }
-          None => return Err(format!("Unexpected end of program after 'while x{cv} !='.")),
+          None => return Err(format!("Unexpected end of program after 'while {cv} !='.")),
         };
         // do
         index += 1;
@@ -157,12 +157,12 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
           Some(Symbol::Keyword(kw)) if kw == "do" => {}
           Some(s) => {
             return Err(format!(
-              "Invalid symbol '{s:?}' in 'while x{cv} != 0 {s:?}'. Only 'do' is allowed."
+              "Invalid symbol '{s:?}' in 'while {cv} != 0 {s:?}'. Only 'do' is allowed."
             ))
           }
           None => {
             return Err(format!(
-              "Unexpected end of program after 'while x{cv} != 0'."
+              "Unexpected end of program after 'while {cv} != 0'."
             ))
           }
         };
@@ -178,12 +178,12 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
           Some(Symbol::Keyword(kw)) if kw == "od" => {}
           Some(s) => {
             return Err(format!(
-              "Invalid symbol '{s:?}' in 'while x{cv} != 0 do .. {s:?}'. Only 'od' is allowed."
+              "Invalid symbol '{s:?}' in 'while {cv} != 0 do .. {s:?}'. Only 'od' is allowed."
             ))
           }
           None => {
             return Err(format!(
-              "Unexpected end of program after 'while x{cv} != 0 do .. '. Expected 'od' instead."
+              "Unexpected end of program after 'while {cv} != 0 do .. '. Expected 'od' instead."
             ))
           }
         };

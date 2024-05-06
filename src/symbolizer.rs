@@ -117,12 +117,25 @@ pub fn symbolize(config: &Config, input: &str) -> Result<Vec<Symbol>, SymbolErro
         let mut cur_keyword_char = keyword_chars.next();
         let mut chars_clone = chars.clone();
         let mut col_clone = col.clone();
-        let mut c_clone = c.clone();
+        let mut c_clone = c.as_ref();
+
+        if !(cur_keyword_char.is_some()
+          && c_clone.is_some()
+          && &cur_keyword_char.unwrap() == c_clone.unwrap())
+        {
+          continue;
+        }
+
+        c_clone = chars_clone.peek();
+        col_clone += 1;
+        cur_keyword_char = keyword_chars.next();
+
         while cur_keyword_char.is_some()
           && c_clone.is_some()
-          && cur_keyword_char.unwrap() == c_clone.unwrap()
+          && &cur_keyword_char.unwrap() == c_clone.unwrap()
         {
-          c_clone = chars_clone.next();
+          chars_clone.next();
+          c_clone = chars_clone.peek();
           col_clone += 1;
           cur_keyword_char = keyword_chars.next();
         }
