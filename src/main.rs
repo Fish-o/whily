@@ -1,40 +1,22 @@
+use std::io::Read;
 use std::time::Instant;
 
+use crate::config::cli;
 use crate::parser::parse;
 use crate::run::run;
 use crate::symbolizer::symbolize;
-use clap::{arg, Command};
 use clio::*;
-use std::io::Read;
+use config::Config;
 
+mod config;
 mod parser;
 mod run;
 mod symbolizer;
 
-fn cli() -> Command {
-  Command::new("git")
-    .about("A simple interpreter for WHILE-programs")
-    .arg_required_else_help(true)
-    .arg(
-      arg!(<FILE> "The file path of the program to run").value_parser(clap::value_parser!(Input)),
-    )
-    .args([
-      arg!(--allow_named_vars "Enabled named variables"),
-      arg!(--allow_underflow "Allows subtraction to underflow, setting the result to max(0,res)"),
-    ])
-}
-
 // TODO: multiplication / IF f=0 then Q else R end
-
-pub struct Config {
-  allow_named_vars: bool,
-  allow_underflow: bool,
-  // allow_constants_in_operations: bool,
-}
 
 fn main() {
   // Getting command line args and setting the config
-
   let mut args = cli().get_matches();
   let mut path = args.remove_one::<Input>("FILE").expect("No file path");
   let mut code = String::new();
@@ -46,17 +28,14 @@ fn main() {
     _ => {}
   }
 
-  let config = Config {
-    allow_named_vars: *args.get_one("allow_named_vars").expect("Missing arg 1"),
-    allow_underflow: *args.get_one("allow_underflow").expect("Missing arg 2"),
-  };
+  let mut config = Config::from(&args);
 
   // Parsing the code
 
   println!("Symbolizing and parsing program...");
-  let res = symbolize(&config, &code);
+  let res = symbolize(&mut config, &code);
   let (_, parsed) = match res {
-    Ok(k) => match parse(&k, 0) {
+    Ok(k) => match parse(&config, &k, 0) {
       Ok(k) => k,
       Err(e) => {
         eprintln!("\nA parser error ocurred.\n{e}");
@@ -79,14 +58,13 @@ fn main() {
     Ok(state) => {
       let elapsed = start.elapsed();
       println!("Success! (time: {:?})\n\nFinished state:", elapsed);
-      let max_k = match state.keys().map(|s| s.chars().count()).max() {
+      let max_chars = match state.keys().map(|s| s.chars().count()).max() {
         Some(max_k) => max_k,
         None => {
           println!("No variables used.");
           return;
         }
       };
-      let max_chars = max_k + 1;
       let mut keys = state.keys().collect::<Vec<_>>();
 
       // This complex sorting function is just there so that x2 will be before x12

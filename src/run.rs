@@ -1,4 +1,8 @@
-use crate::{parser::Statement, Config};
+use crate::{
+  parser::{Statement, Value},
+  symbolizer::Operator,
+  Config,
+};
 use std::collections::HashMap;
 
 const MAX_ITERATIONS: usize = 1024 * 128;
@@ -19,34 +23,58 @@ fn run_with_state(
       run_with_state(config, left, state)?;
       run_with_state(config, right, state)?;
     }
-    Statement::DeclarePlus(v0, v1, v2) => match (state.get(v1), state.get(v2)) {
-      (Some(v1), Some(v2)) => {
-        match v1.checked_add(v2.to_owned()) {
-          Some(val) => state.insert(v0.to_owned(), val),
-          None => return Err(RuntimeError::VariableOverflow(v0.to_owned())),
-        };
-      }
-      (None, _) => return Err(RuntimeError::UnassignedVariable(v1.to_owned())),
-      (_, None) => return Err(RuntimeError::UnassignedVariable(v2.to_owned())),
-    },
-    Statement::DeclareMin(v0, v1, v2) => match (state.get(v1), state.get(v2)) {
-      (Some(v1), Some(v2)) => {
-        match v1.checked_sub(v2.to_owned()) {
-          Some(val) => state.insert(v0.to_owned(), val),
-          None => {
-            if !config.allow_underflow {
-              return Err(RuntimeError::VariableUnderflow(v0.to_owned()));
-            } else {
-              state.insert(v0.to_owned(), 0)
+    Statement::DeclareOperation(v0, v1, operator, v2) => {
+      let v1 = match v1 {
+        Value::Variable(var) if state.contains_key(var) => {
+          state.get(var).expect("Variable not accessed?! 1")
+        }
+        Value::Variable(var) => return Err(RuntimeError::UnassignedVariable(var.to_owned())),
+        Value::Constant(c) => c,
+      };
+      let v2 = match v2 {
+        Value::Variable(var) if state.contains_key(var) => {
+          state.get(var).expect("Variable not accessed?! 2")
+        }
+        Value::Variable(var) => return Err(RuntimeError::UnassignedVariable(var.to_owned())),
+        Value::Constant(c) => c,
+      };
+      match operator {
+        Operator::Subtract => {
+          match v1.checked_sub(v2.to_owned()) {
+            Some(val) => state.insert(v0.to_owned(), val),
+            None => {
+              if !config.allow_underflow {
+                return Err(RuntimeError::VariableUnderflow(v0.to_owned()));
+              } else {
+                state.insert(v0.to_owned(), 0)
+              }
             }
-          }
-        };
+          };
+        }
+        Operator::Add => {
+          match v1.checked_add(v2.to_owned()) {
+            Some(val) => state.insert(v0.to_owned(), val),
+            None => return Err(RuntimeError::VariableOverflow(v0.to_owned())),
+          };
+        }
+
+        Operator::Multiply => {
+          match v1.checked_mul(v2.to_owned()) {
+            Some(val) => state.insert(v0.to_owned(), val),
+            None => return Err(RuntimeError::VariableOverflow(v0.to_owned())),
+          };
+        }
       }
-      (None, _) => return Err(RuntimeError::UnassignedVariable(v1.to_owned())),
-      (_, None) => return Err(RuntimeError::UnassignedVariable(v2.to_owned())),
-    },
-    Statement::DeclareConst(v0, c) => {
-      state.insert(v0.to_owned(), *c);
+    }
+    Statement::DeclareConst(v0, v) => {
+      let v = match v {
+        Value::Variable(var) if state.contains_key(var) => {
+          state.get(var).expect("Variable not accessed?! 2")
+        }
+        Value::Variable(var) => return Err(RuntimeError::UnassignedVariable(var.to_owned())),
+        Value::Constant(c) => c,
+      };
+      state.insert(v0.to_owned(), *v);
     }
     Statement::While(cv, s) => {
       if !state.contains_key(cv) {
@@ -82,7 +110,7 @@ impl std::fmt::Debug for RuntimeError {
       Self::VariableOverflow(v) => write!(f, "VariableOverflow {v}"),
       Self::VariableUnderflow(v) => write!(
         f,
-        "VariableUnderflow {v} (try running with '--allow_underflow'?)"
+        "VariableUnderflow {v} (you can try running it with 'allow_underflow' enabled)"
       ),
       Self::MaxLoopsReached => write!(f, "MaxLoopsReached"),
     }

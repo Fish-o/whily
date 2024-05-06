@@ -6,13 +6,18 @@ pub enum Symbol {
   Variable(String),
   Constant(u64),
   Keyword(String),
+  Operator(Operator),
   Declare,
   NotEquals,
-  Plus,
-  Minus,
   EOS,
 }
 
+#[derive(Debug, Clone)]
+pub enum Operator {
+  Subtract,
+  Add,
+  Multiply,
+}
 impl std::fmt::Debug for Symbol {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
@@ -21,14 +26,15 @@ impl std::fmt::Debug for Symbol {
       Self::Keyword(k) => write!(f, "{k}"),
       Self::Declare => write!(f, ":="),
       Self::NotEquals => write!(f, "!="),
-      Self::Plus => write!(f, "+"),
-      Self::Minus => write!(f, "-"),
+      Self::Operator(Operator::Add) => write!(f, "+"),
+      Self::Operator(Operator::Subtract) => write!(f, "-"),
+      Self::Operator(Operator::Multiply) => write!(f, "*"),
       Self::EOS => write!(f, ";"),
     }
   }
 }
 
-pub fn symbolize(config: &Config, input: &str) -> Result<Vec<Symbol>, SymbolError> {
+pub fn symbolize(config: &mut Config, input: &str) -> Result<Vec<Symbol>, SymbolError> {
   let mut chars = input.chars().peekable().into_iter();
   let mut line = 1;
   let mut col = 0;
@@ -55,6 +61,23 @@ pub fn symbolize(config: &Config, input: &str) -> Result<Vec<Symbol>, SymbolErro
       continue;
     }
     let mut symbol = match &c {
+      Some('#') => {
+        let mut flag = String::new();
+        while matches!(&chars.peek(), Some('a'..='z' | 'A'..='Z' | '_' | '-')) {
+          c = chars.next();
+          flag.push(c.unwrap());
+          col += 1;
+        }
+        let res = config.enable(&flag);
+        if res.is_err() {
+          return Err(SymbolError::new(
+            line,
+            col,
+            &format!("Invalid configuration flag: #{}. Run whily with --help to see the different possible options.",flag)
+          ));
+        }
+        continue;
+      }
       Some('[') => {
         in_comment = true;
         continue;
@@ -67,8 +90,9 @@ pub fn symbolize(config: &Config, input: &str) -> Result<Vec<Symbol>, SymbolErro
         skip = 1;
         Some(Symbol::NotEquals)
       }
-      Some('+') => Some(Symbol::Plus),
-      Some('-') => Some(Symbol::Minus),
+      Some('+') => Some(Symbol::Operator(Operator::Add)),
+      Some('-') => Some(Symbol::Operator(Operator::Subtract)),
+      Some('*') => Some(Symbol::Operator(Operator::Multiply)),
       Some(';') => Some(Symbol::EOS),
       Some('x') => Some(Symbol::Variable("".to_owned())),
       Some('\n') => {
@@ -148,7 +172,11 @@ pub fn symbolize(config: &Config, input: &str) -> Result<Vec<Symbol>, SymbolErro
       }
       if symbol.is_none() {
         if !config.allow_named_vars {
-          return Err(SymbolError::new(line, col, "Unknown keyword"));
+          return Err(SymbolError::new(
+            line,
+            col,
+            "Unknown keyword. Are you using named variables without 'allow_named_vars' enabled?",
+          ));
         }
 
         // make it a variable

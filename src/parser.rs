@@ -1,16 +1,28 @@
-use crate::symbolizer::Symbol;
+use crate::{
+  config::Config,
+  symbolizer::{Operator, Symbol},
+};
 
 #[derive(Debug)]
 pub enum Statement {
   S(Box<Statement>, Box<Statement>),
-  DeclarePlus(String, String, String),
-  DeclareMin(String, String, String),
-  DeclareConst(String, u64),
+  DeclareOperation(String, Value, Operator, Value),
+  DeclareConst(String, Value),
   While(String, Box<Statement>),
 }
 
-pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statement), String> {
+pub enum Value {
+  Variable(String),
+  Constant(u64),
+}
+
+pub fn parse(
+  config: &Config,
+  symbols: &Vec<Symbol>,
+  mut index: usize,
+) -> Result<(usize, Statement), String> {
   let mut left: Option<Statement> = None;
+
   let mut statement: Option<Statement> = None;
   index = index.wrapping_sub(1);
   loop {
@@ -36,12 +48,14 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
         }
         return Ok((index - 1, statement.unwrap()));
       }
+
       Some(Symbol::Keyword(kw)) if kw == "od" => {
         if statement.is_none() {
           return Err("Unexpected 'od', expected a statement first.".to_owned());
         }
         return Ok((index - 1, statement.unwrap()));
       }
+      // 1  2  3  4  5
       // xi := xj + xk
       // xi := xj − xk
       // xi := c
@@ -57,63 +71,79 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
             second
           ));
         }
+
         index += 1;
-        let third = symbols.get(index);
-        match third {
-          Some(Symbol::Constant(c)) => statement = Some(Statement::DeclareConst(v0.to_owned(), *c)),
-          Some(Symbol::Variable(v1)) => {
-            index += 1;
-            let operation = symbols.get(index);
-            index += 1;
-            let right = symbols.get(index);
-
-            let operation = match operation {
-              Some(Symbol::Plus) => Symbol::Plus,
-              Some(Symbol::Minus) => Symbol::Minus,
-              Some(s) => {
-                return Err(format!(
-                  "Invalid symbol '{s:?}' in '{v0} := {v1} {s:?}'. Only + or - allowed."
-                ))
-              }
-              None => return Err(format!("Unexpected end of program after '{v0} := {v1}'")),
-            };
-
-            let v2 = match right {
-            Some(Symbol::Variable(v2)) => v2,
-            Some(s)  => {
-              return Err(format!(
-                "Invalid symbol '{s:?}' in  '{v0} := {v1} {operation:?} {s:?}'. Only another variable is allowed."
-              ))
-            }
-            None => return Err(format!("Unexpected end of program after '{v0} := {v1} {operation:?}'.")),
-          };
-
-            match operation {
-              Symbol::Plus => {
-                statement = Some(Statement::DeclarePlus(
-                  v0.to_owned(),
-                  v1.to_owned(),
-                  v2.to_owned(),
-                ))
-              }
-              Symbol::Minus => {
-                statement = Some(Statement::DeclareMin(
-                  v0.to_owned(),
-                  v1.to_owned(),
-                  v2.to_owned(),
-                ))
-              }
-              _ => unreachable!(),
-            }
-          }
-          Some(t) => {
+        let left = match symbols.get(index) {
+          Some(Symbol::Variable(v1)) => Value::Variable(v1.to_owned()),
+          Some(Symbol::Constant(c)) => Value::Constant(*c),
+          Some(s) => {
             return Err(format!(
-              "Invalid second symbol '{t:?}' after variable '{v0}'"
+              "Unexpected symbol '{s:?}' in  '{v0} := {s:?}', expected either a variable or constant."
             ))
           }
-          None => return Err(format!("Unexpected end of program after variable 'x{v0}'")),
+          None => {
+            return Err(format!(
+              "Unexpected end of program after '{v0} :='."
+            ))
+          }
+        };
+
+        index += 1;
+        match symbols.get(index) {
+          None | Some(Symbol::EOS) => {
+            index -= 1;
+            if config.allow_constants_everywhere || matches!(left, Value::Constant(_)) {
+              statement = Some(Statement::DeclareConst(v0.to_owned(), left));
+            } else {
+              return Err(format!(
+                "Assigning variables to other variables is not allowed without 'allow_constants_everywhere' enabled."
+              ));
+            }
+          }
+          Some(Symbol::Operator(operator)) => {
+            if !matches!(operator, Operator::Subtract | Operator::Add) && !config.extra_operators {
+              return Err(format!(
+                "Using operators other than + or - is not allowed without 'extra_operations' enabled."
+              ));
+            }
+            index += 1;
+            let right = symbols.get(index);
+            let right = match right {
+              Some(Symbol::Variable(v2)) => Value::Variable(v2.to_owned()),
+              Some(Symbol::Constant(c)) => Value::Constant(*c),
+              Some(s) => {
+                return Err(format!(
+                  "Invalid symbol '{s:?}' in '{v0} := {s:?}'. Expected variable or constant."
+                ))
+              }
+              None => return Err(format!("Unexpected end of program after '{v0} :='.")),
+            };
+            match (&left, &right) {
+              (Value::Constant(_), _) | (_, Value::Constant(_)) => {
+                if !config.allow_constants_everywhere {
+                  return Err(format!(
+                  "Using constants in + or - operations is not allowed without 'allow_constants_everywhere' enabled."
+                ));
+                }
+              }
+              _ => {}
+            }
+            statement = Some(Statement::DeclareOperation(
+              v0.to_owned(),
+              left,
+              operator.clone(),
+              right,
+            ))
+          }
+          Some(s) => {
+            return Err(format!(
+              "Invalid symbol '{s:?}' in '{v0} := {left:?} {s:?}'. Expected an operator."
+            ))
+          }
         }
       }
+
+      // }
       // while xi != 0 do P1 od
       Some(Symbol::Keyword(kw)) if kw == "while" => {
         if statement.is_some() {
@@ -167,7 +197,7 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
           }
         };
         // P1
-        let p1 = match parse(symbols, index + 1) {
+        let p1 = match parse(config, symbols, index + 1) {
           Err(e) => return Err(e),
           Ok(p1) => p1,
         };
@@ -193,6 +223,15 @@ pub fn parse(symbols: &Vec<Symbol>, mut index: usize) -> Result<(usize, Statemen
       _ => {
         return Err(format!("Invalid start of statement: {:?}", first));
       }
+    }
+  }
+}
+
+impl std::fmt::Debug for Value {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::Variable(arg0) => write!(f, "{}", arg0),
+      Self::Constant(arg0) => write!(f, "{}", arg0),
     }
   }
 }
