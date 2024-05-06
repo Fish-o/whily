@@ -1,7 +1,0 @@
-#allow_named_vars
-#allow_constants_everywhere
-#extra_operators
-a := 3;
-b := 2;
-c := a * b;
-d := c - 1

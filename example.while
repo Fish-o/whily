@@ -1,0 +1,19 @@
+[ 
+  A program to show how to enable options.
+  Anything between these square brackets is a comment and gets ignored by the interpreter.
+]
+
+#allow_named_vars 
+#allow_constants_everywhere
+#extra_operators
+
+a := 3;
+b := 2;
+answer1 := a * b;
+
+answer2 := 0;
+a_clone := a;
+while a_clone != 0 do
+  answer2 := answer2 + b;
+  a_clone := a_clone - 1 
+od
