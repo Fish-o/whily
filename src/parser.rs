@@ -90,7 +90,7 @@ pub fn parse(
 
         index += 1;
         match symbols.get(index) {
-          None | Some(Symbol::EOS) => {
+          None | Some(Symbol::EOS) | Some(Symbol::Keyword(_)) => {
             index -= 1;
             if config.allow_constants_everywhere || matches!(left, Value::Constant(_)) {
               statement = Some(Statement::DeclareConst(v0.to_owned(), left));
